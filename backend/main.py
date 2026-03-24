@@ -78,10 +78,66 @@ async def upload(file: UploadFile = File(...)):
     else:
         return {"error": "file not supported"}
 
-    skills = detect_skills(text)
+ parsed = parse_resume(text)
 
-    return {
-        "filename": file.filename,
-        "skills": skills,
-        "preview": text[:500],
+   return {
+    "filename": file.filename,
+    "skills": parsed["skills"],
+    "preview": text[:500],
+    "email": parsed["email"],
+    "phone": parsed["phone"],
+}
+
+    def parse_resume(text):
+    data = {
+        "name": "",
+        "email": "",
+        "phone": "",
+        "skills": [],
+        "projects": "",
+        "education": "",
+        "certifications": "",
+        "objective": "",
     }
+
+    lines = text.split("\n")
+
+    for line in lines:
+        if "@" in line and "." in line:
+            data["email"] = line.strip()
+
+        if "+91" in line or len(line) == 10:
+            data["phone"] = line.strip()
+
+    text_lower = text.lower()
+
+    if "career objective" in text_lower:
+        data["objective"] = text
+
+    if "projects" in text_lower:
+        data["projects"] = text
+
+    if "education" in text_lower:
+        data["education"] = text
+
+    if "certifications" in text_lower:
+        data["certifications"] = text
+
+    skills_list = [
+        "c++",
+        "java",
+        "python",
+        "react",
+        "node",
+        "mongodb",
+        "sql",
+        "excel",
+        "power bi",
+        "javascript",
+    ]
+
+    for s in skills_list:
+        if s in text_lower:
+            data["skills"].append(s)
+
+    return data
