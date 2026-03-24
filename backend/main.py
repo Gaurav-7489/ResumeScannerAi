@@ -1,5 +1,6 @@
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
+from typing import List
 import shutil
 import pdfplumber
 import docx
@@ -7,7 +8,8 @@ import os
 
 app = FastAPI()
 
-# CORS (for frontend)
+# ---------------- CORS ----------------
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -19,6 +21,8 @@ app.add_middleware(
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
+
+# ---------------- READ FILES ----------------
 
 def read_pdf(path):
     text = ""
@@ -34,94 +38,27 @@ def read_docx(path):
     return text
 
 
-def detect_skills(text):
-    skills = [
-        "python",
-        "java",
-        "react",
-        "node",
-        "html",
-        "css",
-        "sql",
-        "fastapi",
-        "django",
-        "javascript",
-    ]
+# ---------------- PARSE RESUME ----------------
 
-    found = []
+def parse_resume(text):
 
-    for s in skills:
-        if s.lower() in text.lower():
-            found.append(s)
-
-    return found
-
-
-@app.get("/")
-def home():
-    return {"msg": "AI Resume Scanner running"}
-
-
-@app.post("/upload")
-async def upload(file: UploadFile = File(...)):
-    path = f"{UPLOAD_DIR}/{file.filename}"
-
-    with open(path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-
-    if file.filename.endswith(".pdf"):
-        text = read_pdf(path)
-
-    elif file.filename.endswith(".docx"):
-        text = read_docx(path)
-
-    else:
-        return {"error": "file not supported"}
-
- parsed = parse_resume(text)
-
-   return {
-    "filename": file.filename,
-    "skills": parsed["skills"],
-    "preview": text[:500],
-    "email": parsed["email"],
-    "phone": parsed["phone"],
-}
-
-    def parse_resume(text):
     data = {
-        "name": "",
         "email": "",
         "phone": "",
         "skills": [],
-        "projects": "",
-        "education": "",
-        "certifications": "",
-        "objective": "",
     }
 
     lines = text.split("\n")
 
     for line in lines:
+
         if "@" in line and "." in line:
             data["email"] = line.strip()
 
-        if "+91" in line or len(line) == 10:
+        if "+91" in line or len(line.strip()) == 10:
             data["phone"] = line.strip()
 
     text_lower = text.lower()
-
-    if "career objective" in text_lower:
-        data["objective"] = text
-
-    if "projects" in text_lower:
-        data["projects"] = text
-
-    if "education" in text_lower:
-        data["education"] = text
-
-    if "certifications" in text_lower:
-        data["certifications"] = text
 
     skills_list = [
         "c++",
@@ -134,6 +71,10 @@ async def upload(file: UploadFile = File(...)):
         "excel",
         "power bi",
         "javascript",
+        "html",
+        "css",
+        "django",
+        "fastapi",
     ]
 
     for s in skills_list:
@@ -141,3 +82,113 @@ async def upload(file: UploadFile = File(...)):
             data["skills"].append(s)
 
     return data
+
+
+# ---------------- SCORE ----------------
+
+def score_resume(skills, role):
+
+    score = 0
+
+    role_rules = {
+
+        "Web Developer": [
+            "html",
+            "css",
+            "javascript",
+            "react",
+            "node",
+        ],
+
+        "Machine Learning": [
+            "python",
+            "numpy",
+            "pandas",
+            "tensorflow",
+            "sql",
+        ],
+
+        "Backend": [
+            "python",
+            "django",
+            "fastapi",
+            "sql",
+            "node",
+        ],
+
+        "Data Science": [
+            "python",
+            "sql",
+            "excel",
+            "power bi",
+            "pandas",
+        ],
+    }
+
+    if role not in role_rules:
+        return 0
+
+    needed = role_rules[role]
+
+    for s in skills:
+        if s in needed:
+            score += 10
+
+    return score
+
+
+# ---------------- HOME ----------------
+
+@app.get("/")
+def home():
+    return {"msg": "AI Resume Ranker running"}
+
+
+# ---------------- MAIN UPLOAD ----------------
+
+@app.post("/upload")
+async def upload_files(
+    role: str = Form(...),
+    files: List[UploadFile] = File(...)
+):
+
+    results = []
+
+    for file in files:
+
+        path = f"{UPLOAD_DIR}/{file.filename}"
+
+        with open(path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+
+        # read text
+
+        if file.filename.endswith(".pdf"):
+            text = read_pdf(path)
+
+        elif file.filename.endswith(".docx"):
+            text = read_docx(path)
+
+        else:
+            continue
+
+        parsed = parse_resume(text)
+
+        score = score_resume(parsed["skills"], role)
+
+        results.append({
+            "filename": file.filename,
+            "skills": parsed["skills"],
+            "email": parsed["email"],
+            "phone": parsed["phone"],
+            "score": score,
+        })
+
+    # sort by score
+
+    results.sort(key=lambda x: x["score"], reverse=True)
+
+    return {
+        "role": role,
+        "ranking": results
+    }

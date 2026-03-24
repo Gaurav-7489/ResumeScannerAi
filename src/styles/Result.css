@@ -1,0 +1,139 @@
+.result-page {
+  background: var(--bg-dark);
+  min-height: 100vh;
+  padding: 4rem 2rem;
+  color: white;
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
+  gap: 2rem;
+  max-width: 1300px;
+  margin: 0 auto;
+}
+
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 1.5rem;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  font-size: 0.8rem;
+  font-weight: 900;
+}
+
+/* Horizontal Bar Chart */
+.chart-section {
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--border);
+  padding: 2rem;
+  border-radius: 24px;
+}
+
+.chart-row {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  margin-bottom: 12px;
+}
+
+.chart-label {
+  width: 120px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bar-wrapper {
+  flex: 1;
+  background: rgba(255,255,255,0.05);
+  height: 24px;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.bar-value {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), #818cf8);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 10px;
+  transition: width 1s ease-out;
+  box-shadow: 0 0 15px rgba(99, 102, 241, 0.3);
+}
+
+.bar-percent {
+  font-size: 0.7rem;
+  font-weight: 900;
+  color: white;
+}
+
+/* Mini Cards for List */
+.mini-card {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--border);
+  margin-bottom: 10px;
+  padding: 12px 20px;
+  border-radius: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.gold-border { border-color: #ffd700; background: rgba(255, 215, 0, 0.05); }
+
+.mini-rank { font-weight: 900; color: var(--accent); margin-right: 15px; }
+
+.resume-link { color: var(--text-muted); transition: 0.2s; }
+.resume-link:hover { color: white; transform: scale(1.2); }
+
+/* Champion Bottom Section */
+.domain-champions {
+  max-width: 1300px;
+  margin: 4rem auto 0;
+}
+
+.champion-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.5rem;
+}
+
+.champ-card {
+  background: #0c0c0e;
+  border: 1px solid var(--border);
+  padding: 1.5rem;
+  border-radius: 20px;
+  position: relative;
+}
+
+.champ-label { font-size: 0.6rem; font-weight: 900; color: var(--accent); text-transform: uppercase; }
+
+.champ-score {
+  position: absolute;
+  top: 15px;
+  right: 15px;
+  font-size: 1.5rem;
+  font-weight: 900;
+  opacity: 0.2;
+}
+
+.btn-restart {
+  margin-top: 3rem;
+  padding: 1rem 2rem;
+  background: white;
+  color: black;
+  border: none;
+  border-radius: 12px;
+  font-weight: 900;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
