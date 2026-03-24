@@ -221,3 +221,16 @@
 }
 
 .back-btn-simple:hover { background: rgba(255, 255, 255, 0.1); color: white; }
+
+/* Add to your CSS */
+.upload-grid.dragging {
+  background: rgba(99, 102, 241, 0.1);
+  border: 2px solid var(--accent);
+  border-radius: 20px;
+}
+
+.analyze-btn:disabled {
+  filter: grayscale(1);
+  cursor: not-allowed;
+  transform: none !important;
+}

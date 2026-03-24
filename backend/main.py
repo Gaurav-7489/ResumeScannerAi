@@ -1,5 +1,6 @@
 from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
+
 from typing import List
 import shutil
 import pdfplumber
@@ -10,16 +11,28 @@ app = FastAPI()
 
 # ---------------- CORS ----------------
 
+
+origins = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "https://resumescannerai.vercel.app",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-UPLOAD_DIR = "uploads"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
+# ----------- FOLDERS -----------
+
+BASE_UPLOAD = "uploads"
+DATASET_DIR = "uploads/sample_dataset"
+
+os.makedirs(BASE_UPLOAD, exist_ok=True)
+os.makedirs(DATASET_DIR, exist_ok=True)
 
 
 # ---------------- READ FILES ----------------
@@ -156,7 +169,8 @@ async def upload_files(
 
     for file in files:
 
-        path = f"{UPLOAD_DIR}/{file.filename}"
+        # save inside sample_dataset folder
+        path = os.path.join(DATASET_DIR, file.filename)
 
         with open(path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)

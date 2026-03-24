@@ -2,18 +2,19 @@ import { useState, useMemo, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { 
   UploadCloud, CheckCircle, Rocket, ChevronLeft, 
-  AlertCircle, CheckCircle2, FolderSearch, Search, X 
+  AlertCircle, CheckCircle2, FolderSearch, Search, X, Check
 } from "lucide-react";
 import "../styles/Recruiter.css";
 
-// Audio Engine
+const API = import.meta.env.VITE_API_URL;
+
+// Audio Engine (Memoized to prevent re-creation)
 const playSound = (type) => {
   const audio = new Audio(`/sounds/${type}.mp3`);
   audio.volume = 0.4;
-  audio.play().catch(() => console.log("Audio interaction required"));
+  audio.play().catch(() => {}); 
 };
 
-// Production Domain List
 const DOMAINS = [
   "Web Developer", "Backend Engineer", "Machine Learning", "Data Science", 
   "UI/UX Designer", "DevOps Engineer", "Cloud Architect", "Cybersecurity",
@@ -23,30 +24,29 @@ const DOMAINS = [
 
 export default function Recruiter() {
   const navigate = useNavigate();
+  const dropdownRef = useRef(null);
+  
   const [role, setRole] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [errorCount, setErrorCount] = useState(0);
   const [toast, setToast] = useState({ show: false, msg: "", type: "" });
-  
-  const dropdownRef = useRef(null);
+  const [errorCount, setErrorCount] = useState(0);
 
-  // Filter logic for search - Handles the "No Bullshit" case
   const filteredDomains = useMemo(() => {
     return DOMAINS.filter(d => d.toLowerCase().includes(searchTerm.toLowerCase()));
   }, [searchTerm]);
 
-  // Close dropdown when clicking outside
   useEffect(() => {
-    const handleClickOutside = (e) => {
+    const handleClick = (e) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
         setIsDropdownOpen(false);
       }
     };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
   const triggerToast = (msg, type) => {
@@ -62,10 +62,27 @@ export default function Recruiter() {
     setTimeout(() => setToast({ show: false, msg: "", type: "" }), 4000);
   };
 
-  const handleFiles = (e) => {
-    const selected = [...e.target.files];
-    const validFiles = selected.filter(f => !f.name.startsWith('.'));
-    setFiles(validFiles);
+  const processFiles = (uploadedFiles) => {
+    const validFiles = Array.from(uploadedFiles).filter(f => !f.name.startsWith('.'));
+    if (validFiles.length > 0) {
+      setFiles(validFiles);
+    }
+  };
+
+  const handleDrag = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") setIsDragging(true);
+    else if (e.type === "dragleave") setIsDragging(false);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      processFiles(e.dataTransfer.files);
+    }
   };
 
   const handleSelectRole = (domain) => {
@@ -76,147 +93,241 @@ export default function Recruiter() {
   };
 
   const handleAnalyze = async () => {
+
     if (!role || !DOMAINS.includes(role)) {
-      triggerToast("Please select a valid known domain.", "error");
-      return;
+      return triggerToast("Please select a valid known domain.", "error");
     }
+
     if (files.length === 0) {
-      triggerToast("Please upload resumes or a ZIP folder.", "error");
-      return;
+      return triggerToast("No resumes or ZIP folders detected for analysis.", "error");
     }
 
     setLoading(true);
 
     const formData = new FormData();
     formData.append("role", role);
-    files.forEach((file) => formData.append("files", file));
+    files.forEach(file => formData.append("files", file));
 
     try {
-      const res = await fetch("http://127.0.0.1:8000/upload", {
+
+      const res = await fetch(`${API}/upload`, {
         method: "POST",
         body: formData,
       });
 
-      if (!res.ok) throw new Error("Upload failed");
+      if (!res.ok) throw new Error();
 
       const data = await res.json();
+
       triggerToast(`${files.length} Assets Staged!`, "success");
 
       setTimeout(() => {
         navigate("/analyzing", { state: data });
-      }, 1200);
+      }, 1000);
 
-    } catch (error) {
-      console.error("Upload failed", error);
-      triggerToast("Server error. Is your FastAPI backend running?", "error");
+    } catch (err) {
+
+      triggerToast("Connection failed. Check FastAPI backend.", "error");
+
     } finally {
-      setLoading(false);
-    }
-  };
 
-  const handleBack = () => {
-    playSound("click2");
-    navigate("/type");
+      setLoading(false);
+
+    }
   };
 
   return (
     <div className="recruiter-page">
+
       {toast.show && (
         <div className="toast-container">
           <div className={`toast ${toast.type}`}>
-            {toast.type === "error" ? <AlertCircle size={20} /> : <CheckCircle2 size={20} />}
+            {toast.type === "error"
+              ? <AlertCircle size={20} />
+              : <CheckCircle2 size={20} />}
             <span>{toast.msg}</span>
           </div>
         </div>
       )}
 
-      <div className="hero-glow" style={{ opacity: 0.4 }} />
-      
       <div className="upload-card production-card">
-        <button className="back-btn-simple" onClick={handleBack}>
+
+        <button
+          className="back-btn-simple"
+          onClick={() => {
+            playSound("click2");
+            navigate("/type");
+          }}
+        >
           <ChevronLeft size={16} /> Back
         </button>
 
-        <h2>Rank <span className="gradient-text">Engine </span></h2>
+        <h2>
+          Rank <span className="gradient-text">Engine</span>
+        </h2>
 
-        {/* CUSTOM SEARCHABLE DOMAIN INPUT */}
+        {/* DOMAIN SEARCH */}
+
         <div className="input-group" ref={dropdownRef}>
+
           <label>Target Domain</label>
+
           <div className={`modern-search-wrapper ${isDropdownOpen ? 'active' : ''}`}>
+
             <Search size={18} className="search-glass" />
-            <input 
-              type="text" 
-              placeholder="Search or type domain..." 
+
+            <input
+              type="text"
+              placeholder="Enter job role keyword…"
               value={searchTerm}
               onFocus={() => setIsDropdownOpen(true)}
               onChange={(e) => {
                 setSearchTerm(e.target.value);
-                setRole(""); 
-                setIsDropdownOpen(true);
+                if (role) setRole("");
               }}
+              onKeyDown={(e) =>
+                e.key === 'Enter' &&
+                filteredDomains[0] &&
+                handleSelectRole(filteredDomains[0])
+              }
             />
+
             {searchTerm && (
-              <X size={16} className="clear-search" onClick={() => {setSearchTerm(""); setRole("");}} />
+              <X
+                size={16}
+                className="clear-search"
+                onClick={() => {
+                  setSearchTerm("");
+                  setRole("");
+                }}
+              />
             )}
-            
+
             {isDropdownOpen && (
+
               <div className="search-results-floating">
+
                 {filteredDomains.length > 0 ? (
+
                   filteredDomains.map(d => (
-                    <div key={d} className="search-item" onClick={() => handleSelectRole(d)}>
+
+                    <div
+                      key={d}
+                      className="search-item"
+                      onClick={() => handleSelectRole(d)}
+                    >
                       {d}
+
+                      {role === d &&
+                        <Check size={14}
+                          style={{
+                            marginLeft: 'auto',
+                            color: 'var(--accent)'
+                          }}
+                        />
+                      }
+
                     </div>
+
                   ))
+
                 ) : (
+
                   <div className="search-no-results">
-                    "<span>{searchTerm}</span>" is unknown. Check your spelling.
+
+                    "<span>{searchTerm}</span>" unknown specialization
+
                   </div>
+
                 )}
+
               </div>
+
             )}
+
           </div>
+
         </div>
 
-        {/* DUAL UPLOAD ZONE: FILES & DIRECTORIES */}
+        {/* UPLOAD */}
+
         <div className="input-group">
-          <label>Resume Source (PDF, ZIP, or Folder)</label>
-          <div className="upload-grid">
+
+          <label>Resume Source</label>
+
+          <div
+            className={`upload-grid ${isDragging ? 'dragging' : ''}`}
+            onDragEnter={handleDrag}
+            onDragLeave={handleDrag}
+            onDragOver={handleDrag}
+            onDrop={handleDrop}
+          >
+
             <label className="upload-box">
-              <input type="file" multiple onChange={handleFiles} hidden />
-              <UploadCloud size={30} />
-              <span>Files / ZIP</span>
-            </label>
-            
-            <label className="upload-box">
-              <input 
-                type="file" 
-                webkitdirectory="true" 
-                directory="true" 
-                multiple 
-                onChange={handleFiles} 
-                hidden 
+
+              <input
+                type="file"
+                multiple
+                onChange={(e) => processFiles(e.target.files)}
+                hidden
               />
-              <FolderSearch size={30} />
-              <span>Full Folder</span>
+
+              <UploadCloud size={30} />
+
+              <span>Import Files / ZIP</span>
+
             </label>
+
+            <label className="upload-box">
+
+              <input
+                type="file"
+                webkitdirectory="true"
+                multiple
+                onChange={(e) => processFiles(e.target.files)}
+                hidden
+              />
+
+              <FolderSearch size={30} />
+
+              <span>Full Folder</span>
+
+            </label>
+
           </div>
 
           {files.length > 0 && (
+
             <div className="file-info-badge">
-              <CheckCircle size={14} /> {files.length} items ready for processing
+
+              <CheckCircle size={14} />
+
+              {files.length} Files Ready
+
+              <button onClick={() => setFiles([])}>
+                <X size={14} />
+              </button>
+
             </div>
+
           )}
+
         </div>
 
-        <button 
-          className="analyze-btn" 
-          onClick={handleAnalyze} 
-          disabled={loading}
+        <button
+          className="analyze-btn"
+          onClick={handleAnalyze}
+          disabled={loading || !role || files.length === 0}
         >
-          {loading ? "PROCESSING PRODUCTION DATA..." : "EXECUTE ANALYSIS"}
+
+          {loading ? "PROCESSING..." : "START ANALYSIS"}
+
           {!loading && <Rocket size={20} />}
+
         </button>
+
       </div>
+
     </div>
   );
 }
