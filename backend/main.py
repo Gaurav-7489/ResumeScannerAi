@@ -9,26 +9,25 @@ import uuid
 
 app = FastAPI()
 
-# ---------------- CORS (FINAL FIX - WORKS EVERYWHERE) ----------------
+# ---------------- CORS ----------------
+
 origins = [
-    # LOCALHOST
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     "http://localhost:5174",
     "http://127.0.0.1:5174",
-
-    # MAIN PRODUCTION
     "https://resume-scanner-ai-one.vercel.app",
 ]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
-    allow_origin_regex=r"https://.*\.vercel\.app",  # 🔥 allows ALL preview URLs
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 # ----------- FOLDERS -----------
 
 BASE_UPLOAD = "uploads"
@@ -43,10 +42,15 @@ def read_pdf(path):
     text = ""
     try:
         with pdfplumber.open(path) as pdf:
-            for page in pdf.pages:
-                text += page.extract_text() or ""
+            for i, page in enumerate(pdf.pages):
+                extracted = page.extract_text()
+                if extracted:
+                    print(f"[PDF] Page {i} length:", len(extracted))
+                    text += extracted
+                else:
+                    print(f"[PDF WARNING] Page {i} empty")
     except Exception as e:
-        print("PDF ERROR:", e)
+        print("[PDF ERROR]:", e)
     return text
 
 
@@ -55,12 +59,13 @@ def read_docx(path):
     try:
         doc = docx.Document(path)
         text = "\n".join([p.text for p in doc.paragraphs])
+        print("[DOCX] length:", len(text))
     except Exception as e:
-        print("DOCX ERROR:", e)
+        print("[DOCX ERROR]:", e)
     return text
 
 
-# ---------------- PARSE RESUME ----------------
+# ---------------- PARSE ----------------
 
 def parse_resume(text):
 
@@ -69,6 +74,8 @@ def parse_resume(text):
         "phone": "",
         "skills": [],
     }
+
+    print("[DEBUG] TEXT LENGTH:", len(text))
 
     lines = text.split("\n")
 
@@ -85,12 +92,14 @@ def parse_resume(text):
     skills_list = [
         "c++", "java", "python", "react", "node", "mongodb",
         "sql", "excel", "power bi", "javascript", "html",
-        "css", "django", "fastapi",
+        "css", "django", "fastapi", "docker", "aws", "linux"
     ]
 
     for s in skills_list:
         if s in text_lower:
             data["skills"].append(s)
+
+    print("[DEBUG] SKILLS FOUND:", data["skills"])
 
     return data
 
@@ -102,17 +111,14 @@ def score_resume(skills, role):
     score = 0
 
     role_rules = {
-
         "Web Developer": ["html", "css", "javascript", "react", "node"],
-
         "Machine Learning": ["python", "numpy", "pandas", "tensorflow", "sql"],
-
         "Backend Engineer": ["python", "django", "fastapi", "sql", "node"],
-
         "Data Science": ["python", "sql", "excel", "power bi", "pandas"],
     }
 
     if role not in role_rules:
+        print("[WARNING] Unknown role:", role)
         return 0
 
     needed = role_rules[role]
@@ -121,17 +127,17 @@ def score_resume(skills, role):
         if s in needed:
             score += 10
 
+    print("[DEBUG] SCORE:", score)
+
     return score
 
 
-# ---------------- HOME ----------------
+# ---------------- ROUTES ----------------
 
 @app.get("/")
 def home():
-    return {"msg": "AI Resume Ranker running (CORS fixed 😎)"}
+    return {"msg": "Backend running DEBUG mode 🚀"}
 
-
-# ---------------- MAIN UPLOAD ----------------
 
 @app.post("/upload")
 async def upload_files(
@@ -139,27 +145,47 @@ async def upload_files(
     files: List[UploadFile] = File(...)
 ):
 
+    print("\n========= NEW REQUEST =========")
+    print("[ROLE]:", role)
+    print("[FILES COUNT]:", len(files))
+
     results = []
 
     for file in files:
-
         try:
+            print("\n[FILE]:", file.filename)
+
             unique_name = f"{uuid.uuid4()}_{file.filename}"
             path = os.path.join(DATASET_DIR, unique_name)
 
             with open(path, "wb") as buffer:
                 shutil.copyfileobj(file.file, buffer)
 
+            # ---------- TYPE ----------
             if file.filename.lower().endswith(".pdf"):
+                print("[TYPE] PDF")
                 text = read_pdf(path)
 
             elif file.filename.lower().endswith(".docx"):
+                print("[TYPE] DOCX")
                 text = read_docx(path)
 
             else:
+                print("[SKIP] Unsupported:", file.filename)
                 continue
 
+            # ---------- EMPTY ----------
+            if not text.strip():
+                print("[ERROR] EMPTY TEXT:", file.filename)
+                continue
+
+            # ---------- PARSE ----------
             parsed = parse_resume(text)
+
+            if not parsed["skills"]:
+                print("[WARNING] NO SKILLS FOUND:", file.filename)
+
+            # ---------- SCORE ----------
             score = score_resume(parsed["skills"], role)
 
             results.append({
@@ -170,9 +196,12 @@ async def upload_files(
                 "score": score,
             })
 
+            print("[SUCCESS] Added:", file.filename)
+
         except Exception as e:
-            print("FILE ERROR:", file.filename, e)
-            continue
+            print("[CRASH FILE]:", file.filename, e)
+
+    print("\n[FINAL COUNT]:", len(results))
 
     results.sort(key=lambda x: x["score"], reverse=True)
 
