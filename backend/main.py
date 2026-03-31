@@ -151,10 +151,10 @@ async def upload_files(
             with open(path, "wb") as buffer:
                 shutil.copyfileobj(file.file, buffer)
 
-            if file.filename.endswith(".pdf"):
+            if file.filename.lower().endswith(".pdf"):
                 text = read_pdf(path)
 
-            elif file.filename.endswith(".docx"):
+           elif file.filename.lower().endswith(".docx"):
                 text = read_docx(path)
 
             else:
