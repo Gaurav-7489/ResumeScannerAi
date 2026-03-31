@@ -5,7 +5,7 @@ import "../styles/Result.css";
 const playSound = (type) => {
   const audio = new Audio(`/sounds/${type}.mp3`);
   audio.volume = 0.4;
-  audio.play().catch(() => {});
+  audio.play().catch(() => { });
 };
 
 export default function Result() {
@@ -35,6 +35,58 @@ export default function Result() {
 
   const ranking = data.ranking.slice(0, 10); // Top 10 focus
 
+  // 🔥 DOMAIN CHAMPION LOGIC (REAL FIX)
+  const getDomainChampions = (ranking) => {
+    const champions = {
+      Backend: null,
+      "UI/UX": null,
+      DevOps: null,
+    };
+
+    ranking.forEach((res) => {
+     const skills = (res.skills || []).map(s => s.toLowerCase());
+
+      // Backend
+      if (
+        skills.includes("python") ||
+        skills.includes("django") ||
+        skills.includes("fastapi") ||
+        skills.includes("node")
+      ) {
+        if (!champions.Backend || res.score > champions.Backend.score) {
+          champions.Backend = res;
+        }
+      }
+
+      // UI/UX
+      if (
+        skills.includes("html") ||
+        skills.includes("css") ||
+        skills.includes("javascript") ||
+        skills.includes("react")
+      ) {
+        if (!champions["UI/UX"] || res.score > champions["UI/UX"].score) {
+          champions["UI/UX"] = res;
+        }
+      }
+
+      // DevOps
+      if (
+        skills.includes("linux") ||
+        skills.includes("docker") ||
+        skills.includes("aws")
+      ) {
+        if (!champions.DevOps || res.score > champions.DevOps.score) {
+          champions.DevOps = res;
+        }
+      }
+    });
+
+    return champions;
+  };
+
+  const champions = getDomainChampions(ranking);
+
   const handleRestart = () => {
     playSound("click2");
     localStorage.removeItem("resultData"); // cleanup
@@ -51,7 +103,7 @@ export default function Result() {
       </header>
 
       <div className="dashboard-grid">
-        
+
         {/* LEFT COLUMN: THE VISUAL CHART */}
         <section className="chart-section">
           <div className="section-title">
@@ -62,8 +114,8 @@ export default function Result() {
               <div key={i} className="chart-row">
                 <span className="chart-label">{res.filename.split('.')[0]}</span>
                 <div className="bar-wrapper">
-                  <div 
-                    className="bar-value" 
+                  <div
+                    className="bar-value"
                     style={{ width: `${res.score}%` }}
                   >
                     <span className="bar-percent">{res.score}</span>
@@ -103,10 +155,20 @@ export default function Result() {
         <div className="section-title">
           <Trophy size={20} /> <h2>Cross-Domain Top Talent</h2>
         </div>
+
         <div className="champion-grid">
-          <ChampionCard domain="Backend" name="Ankit_Final.pdf" score="98" />
-          <ChampionCard domain="UI/UX" name="Saksham_Design.pdf" score="95" />
-          <ChampionCard domain="DevOps" name="Gaurav_Admin.pdf" score="99" />
+          {Object.entries(champions).map(([domain, res], index) => {
+            if (!res) return null;
+
+            return (
+              <ChampionCard
+                key={index}
+                domain={domain}
+                name={res.filename}
+                score={res.score}
+              />
+            );
+          })}
         </div>
       </section>
 
