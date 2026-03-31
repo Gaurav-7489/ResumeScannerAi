@@ -6,6 +6,7 @@ import pdfplumber
 import docx
 import os
 import uuid
+import re
 
 app = FastAPI()
 
@@ -28,7 +29,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ----------- FOLDERS -----------
+# ---------------- FOLDERS ----------------
 
 BASE_UPLOAD = "uploads"
 DATASET_DIR = "uploads/sample_dataset"
@@ -36,36 +37,54 @@ DATASET_DIR = "uploads/sample_dataset"
 os.makedirs(BASE_UPLOAD, exist_ok=True)
 os.makedirs(DATASET_DIR, exist_ok=True)
 
-# ---------------- READ FILES ----------------
+# ---------------- READ PDF ----------------
 
 def read_pdf(path):
     text = ""
+
     try:
         with pdfplumber.open(path) as pdf:
             for i, page in enumerate(pdf.pages):
                 extracted = page.extract_text()
+
                 if extracted:
                     print(f"[PDF] Page {i} length:", len(extracted))
-                    text += extracted
+                    text += extracted + "\n"
                 else:
                     print(f"[PDF WARNING] Page {i} empty")
+
     except Exception as e:
         print("[PDF ERROR]:", e)
+
     return text
 
 
+# ---------------- READ DOCX ----------------
+
 def read_docx(path):
     text = ""
+
     try:
         doc = docx.Document(path)
         text = "\n".join([p.text for p in doc.paragraphs])
         print("[DOCX] length:", len(text))
+
     except Exception as e:
         print("[DOCX ERROR]:", e)
+
     return text
 
 
-# ---------------- PARSE ----------------
+# ---------------- CLEAN TEXT ----------------
+
+def clean_text(text):
+    text = text.lower()
+    text = re.sub(r"[^a-z0-9+.#\s]", " ", text)
+    text = re.sub(r"\s+", " ", text)
+    return text
+
+
+# ---------------- PARSE RESUME ----------------
 
 def parse_resume(text):
 
@@ -77,27 +96,39 @@ def parse_resume(text):
 
     print("[DEBUG] TEXT LENGTH:", len(text))
 
-    lines = text.split("\n")
+    # EMAIL
+    email_match = re.findall(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+", text)
+    if email_match:
+        data["email"] = email_match[0]
 
-    for line in lines:
+    # PHONE
+    phone_match = re.findall(r"\b\d{10}\b", text)
+    if phone_match:
+        data["phone"] = phone_match[0]
 
-        if "@" in line and "." in line:
-            data["email"] = line.strip()
+    text_lower = clean_text(text)
 
-        if "+91" in line or (line.strip().isdigit() and len(line.strip()) == 10):
-            data["phone"] = line.strip()
-
-    text_lower = text.lower()
-
+    # HUGE SKILL DATABASE
     skills_list = [
-        "c++", "java", "python", "react", "node", "mongodb",
-        "sql", "excel", "power bi", "javascript", "html",
-        "css", "django", "fastapi", "docker", "aws", "linux"
+        # programming
+        "python", "java", "c++", "c", "javascript", "typescript",
+        # web
+        "html", "css", "react", "angular", "vue", "node", "express",
+        # backend
+        "django", "fastapi", "spring", "flask",
+        # database
+        "sql", "mysql", "postgresql", "mongodb",
+        # data
+        "pandas", "numpy", "power bi", "excel",
+        # ml
+        "tensorflow", "keras", "scikit", "machine learning",
+        # devops
+        "docker", "kubernetes", "aws", "linux", "git", "ci/cd"
     ]
 
-    for s in skills_list:
-        if s in text_lower:
-            data["skills"].append(s)
+    for skill in skills_list:
+        if skill in text_lower:
+            data["skills"].append(skill)
 
     print("[DEBUG] SKILLS FOUND:", data["skills"])
 
@@ -111,9 +142,13 @@ def score_resume(skills, role):
     score = 0
 
     role_rules = {
+
         "Web Developer": ["html", "css", "javascript", "react", "node"],
+
         "Machine Learning": ["python", "numpy", "pandas", "tensorflow", "sql"],
+
         "Backend Engineer": ["python", "django", "fastapi", "sql", "node"],
+
         "Data Science": ["python", "sql", "excel", "power bi", "pandas"],
     }
 
@@ -125,19 +160,21 @@ def score_resume(skills, role):
 
     for s in skills:
         if s in needed:
-            score += 10
+            score += 20  # boosted scoring
 
     print("[DEBUG] SCORE:", score)
 
     return score
 
 
-# ---------------- ROUTES ----------------
+# ---------------- ROOT ----------------
 
 @app.get("/")
 def home():
-    return {"msg": "Backend running DEBUG mode 🚀"}
+    return {"msg": "🔥 Resume Ranker Backend FULLY WORKING 🔥"}
 
+
+# ---------------- UPLOAD ----------------
 
 @app.post("/upload")
 async def upload_files(
@@ -152,6 +189,7 @@ async def upload_files(
     results = []
 
     for file in files:
+
         try:
             print("\n[FILE]:", file.filename)
 
@@ -161,7 +199,9 @@ async def upload_files(
             with open(path, "wb") as buffer:
                 shutil.copyfileobj(file.file, buffer)
 
-            # ---------- TYPE ----------
+            text = ""
+
+            # -------- FILE TYPE --------
             if file.filename.lower().endswith(".pdf"):
                 print("[TYPE] PDF")
                 text = read_pdf(path)
@@ -174,18 +214,20 @@ async def upload_files(
                 print("[SKIP] Unsupported:", file.filename)
                 continue
 
-            # ---------- EMPTY ----------
-            if not text.strip():
-                print("[ERROR] EMPTY TEXT:", file.filename)
+            # -------- EMPTY CHECK --------
+            if not text or len(text.strip()) < 30:
+                print("[ERROR] EMPTY / USELESS TEXT:", file.filename)
                 continue
 
-            # ---------- PARSE ----------
+            # -------- PARSE --------
             parsed = parse_resume(text)
 
+            # fallback (VERY IMPORTANT)
             if not parsed["skills"]:
-                print("[WARNING] NO SKILLS FOUND:", file.filename)
+                print("[FALLBACK] assigning default minimal skill")
+                parsed["skills"] = ["unknown"]
 
-            # ---------- SCORE ----------
+            # -------- SCORE --------
             score = score_resume(parsed["skills"], role)
 
             results.append({
@@ -202,6 +244,10 @@ async def upload_files(
             print("[CRASH FILE]:", file.filename, e)
 
     print("\n[FINAL COUNT]:", len(results))
+
+    # -------- SAFETY FALLBACK --------
+    if len(results) == 0:
+        print("[CRITICAL] No valid resumes processed")
 
     results.sort(key=lambda x: x["score"], reverse=True)
 
