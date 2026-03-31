@@ -19,13 +19,14 @@ if ENV == "development":
     origins = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
     ]
 else:
     origins = [
-        "https://resumescannerai.vercel.app",
+        "https://resume-scanner-ai-one.vercel.app",
     ]
-
-# TEMP: allow all if needed (debug mode)
+# 🔥 DEBUG MODE (uncomment only if needed)
 # origins = ["*"]
 
 app.add_middleware(
