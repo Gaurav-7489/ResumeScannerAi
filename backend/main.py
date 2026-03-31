@@ -9,25 +9,18 @@ import uuid
 
 app = FastAPI()
 
-# ---------------- ENV CONFIG ----------------
+# ---------------- CORS (FINAL FIX - WORKS EVERYWHERE) ----------------
 
-ENV = os.getenv("ENV", "development")
+origins = [
+    # LOCALHOST
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:5174",
+    "http://127.0.0.1:5174",
 
-# ---------------- CORS ----------------
-
-if ENV == "development":
-    origins = [
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:5174",
-        "http://127.0.0.1:5174",
-    ]
-else:
-    origins = [
-        "https://resume-scanner-ai-one.vercel.app",
-    ]
-# 🔥 DEBUG MODE (uncomment only if needed)
-# origins = ["*"]
+    # PRODUCTION FRONTEND
+    "https://resume-scanner-ai-one.vercel.app",
+]
 
 app.add_middleware(
     CORSMiddleware,
@@ -136,7 +129,7 @@ def score_resume(skills, role):
 
 @app.get("/")
 def home():
-    return {"msg": f"AI Resume Ranker running in {ENV} mode"}
+    return {"msg": "AI Resume Ranker running (CORS fixed 😎)"}
 
 
 # ---------------- MAIN UPLOAD ----------------
@@ -152,14 +145,12 @@ async def upload_files(
     for file in files:
 
         try:
-            # unique filename (important for production)
             unique_name = f"{uuid.uuid4()}_{file.filename}"
             path = os.path.join(DATASET_DIR, unique_name)
 
             with open(path, "wb") as buffer:
                 shutil.copyfileobj(file.file, buffer)
 
-            # read text
             if file.filename.endswith(".pdf"):
                 text = read_pdf(path)
 
@@ -184,7 +175,6 @@ async def upload_files(
             print("FILE ERROR:", file.filename, e)
             continue
 
-    # sort by score
     results.sort(key=lambda x: x["score"], reverse=True)
 
     return {

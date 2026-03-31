@@ -11,7 +11,18 @@ const playSound = (type) => {
 export default function Result() {
   const location = useLocation();
   const navigate = useNavigate();
-  const data = location.state;
+
+  // 🔥 fallback system (important fix)
+  let data = location.state;
+
+  if (!data) {
+    const stored = localStorage.getItem("resultData");
+    if (stored) {
+      data = JSON.parse(stored);
+    }
+  }
+
+  console.log("RESULT DATA:", data);
 
   if (!data || !data.ranking) {
     return (
@@ -26,6 +37,7 @@ export default function Result() {
 
   const handleRestart = () => {
     playSound("click2");
+    localStorage.removeItem("resultData"); // cleanup
     navigate("/recruiter");
   };
 

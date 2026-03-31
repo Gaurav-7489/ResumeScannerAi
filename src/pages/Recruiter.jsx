@@ -8,21 +8,19 @@ import "../styles/Recruiter.css";
 
 /* ================= API CONFIG (FIXED FOR LOCAL + PROD) ================= */
 
-// fallback logic (this is the magic)
 const getApiBase = () => {
   const envUrl = import.meta.env.VITE_API_URL;
 
   if (envUrl && envUrl.trim() !== "") {
-    return envUrl.replace(/\/$/, ""); // remove trailing slash
+    return envUrl.replace(/\/$/, "");
   }
 
-  // fallback if env not set
   if (window.location.hostname === "localhost") {
     return "http://localhost:8000";
   }
 
-  // production fallback (change if needed)
-  return "https://your-backend.onrender.com";
+  // 🔥 FIXED YOUR BACKEND URL HERE
+  return "https://resumescannerai-backend.onrender.com";
 };
 
 const API = getApiBase();
@@ -138,6 +136,9 @@ export default function Recruiter() {
       if (!res.ok) throw new Error();
 
       const data = await res.json();
+
+      // 🔥 SAVE DATA (CRITICAL FIX)
+      localStorage.setItem("resultData", JSON.stringify(data));
 
       triggerToast(`${files.length} Assets Staged!`, "success");
 
