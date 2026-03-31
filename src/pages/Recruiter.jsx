@@ -50,12 +50,32 @@ export default function Recruiter() {
   const [isDragging, setIsDragging] = useState(false);
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState(0); // New state for progress bar
   const [toast, setToast] = useState({ show: false, msg: "", type: "" });
   const [errorCount, setErrorCount] = useState(0);
 
   const filteredDomains = useMemo(() => {
     return DOMAINS.filter(d => d.toLowerCase().includes(searchTerm.toLowerCase()));
   }, [searchTerm]);
+
+  // Handle Progress Animation logic
+  useEffect(() => {
+    let interval;
+    if (loading) {
+      setProgress(0);
+      interval = setInterval(() => {
+        setProgress((prev) => {
+          if (prev >= 95) return prev; // Pause at 95% until finished
+          const increment = prev < 30 ? 5 : prev < 70 ? 2 : 0.5; 
+          return prev + increment;
+        });
+      }, 200);
+    } else {
+      setProgress(0);
+      clearInterval(interval);
+    }
+    return () => clearInterval(interval);
+  }, [loading]);
 
   useEffect(() => {
     const handleClick = (e) => {
@@ -111,7 +131,6 @@ export default function Recruiter() {
   };
 
   const handleAnalyze = async () => {
-
     if (!role || !DOMAINS.includes(role)) {
       return triggerToast("Please select a valid known domain.", "error");
     }
@@ -127,7 +146,6 @@ export default function Recruiter() {
     files.forEach(file => formData.append("files", file));
 
     try {
-
       const res = await fetch(`${API}/upload`, {
         method: "POST",
         body: formData,
@@ -136,30 +154,56 @@ export default function Recruiter() {
       if (!res.ok) throw new Error();
 
       const data = await res.json();
+      
+      // Complete the bar before navigating
+      setProgress(100);
 
-      // 🔥 SAVE DATA (CRITICAL FIX)
       localStorage.setItem("resultData", JSON.stringify(data));
-
       triggerToast(`${files.length} Assets Staged!`, "success");
 
       setTimeout(() => {
         navigate("/analyzing", { state: data });
-      }, 1000);
+      }, 800);
 
     } catch (err) {
-
       console.error("API ERROR:", err);
       triggerToast("Connection failed. Check FastAPI backend.", "error");
-
-    } finally {
-
       setLoading(false);
-
+    } finally {
+      // Loading state is handled in the catch or after the timeout in success
     }
   };
 
   return (
     <div className="recruiter-page">
+      {/* Styles injected for the Progress Bar - You can also move these to Recruiter.css */}
+      <style>{`
+        .progress-container {
+          width: 100%;
+          background: rgba(255, 255, 255, 0.05);
+          border-radius: 10px;
+          height: 8px;
+          margin: 15px 0;
+          overflow: hidden;
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          position: relative;
+        }
+        .progress-fill {
+          height: 100%;
+          background: linear-gradient(90deg, #6366f1, #a855f7, #ec4899);
+          transition: width 0.4s cubic-bezier(0.17, 0.67, 0.83, 0.67);
+          box-shadow: 0 0 10px rgba(168, 85, 247, 0.5);
+        }
+        .loading-text-sub {
+          font-size: 11px;
+          color: #94a3b8;
+          text-align: center;
+          display: block;
+          margin-top: 4px;
+          letter-spacing: 1px;
+          text-transform: uppercase;
+        }
+      `}</style>
 
       {toast.show && (
         <div className="toast-container">
@@ -173,7 +217,6 @@ export default function Recruiter() {
       )}
 
       <div className="upload-card production-card">
-
         <button
           className="back-btn-simple"
           onClick={() => {
@@ -189,13 +232,9 @@ export default function Recruiter() {
         </h2>
 
         <div className="input-group" ref={dropdownRef}>
-
           <label>Target Domain</label>
-
           <div className={`modern-search-wrapper ${isDropdownOpen ? 'active' : ''}`}>
-
             <Search size={18} className="search-glass" />
-
             <input
               type="text"
               placeholder="Enter job role keyword…"
@@ -211,7 +250,6 @@ export default function Recruiter() {
                 handleSelectRole(filteredDomains[0])
               }
             />
-
             {searchTerm && (
               <X
                 size={16}
@@ -222,22 +260,16 @@ export default function Recruiter() {
                 }}
               />
             )}
-
             {isDropdownOpen && (
-
               <div className="search-results-floating">
-
                 {filteredDomains.length > 0 ? (
-
                   filteredDomains.map(d => (
-
                     <div
                       key={d}
                       className="search-item"
                       onClick={() => handleSelectRole(d)}
                     >
                       {d}
-
                       {role === d &&
                         <Check size={14}
                           style={{
@@ -246,33 +278,20 @@ export default function Recruiter() {
                           }}
                         />
                       }
-
                     </div>
-
                   ))
-
                 ) : (
-
                   <div className="search-no-results">
-
                     "<span>{searchTerm}</span>" unknown specialization
-
                   </div>
-
                 )}
-
               </div>
-
             )}
-
           </div>
-
         </div>
 
         <div className="input-group">
-
           <label>Resume Source</label>
-
           <div
             className={`upload-grid ${isDragging ? 'dragging' : ''}`}
             onDragEnter={handleDrag}
@@ -280,24 +299,17 @@ export default function Recruiter() {
             onDragOver={handleDrag}
             onDrop={handleDrop}
           >
-
             <label className="upload-box">
-
               <input
                 type="file"
                 multiple
                 onChange={(e) => processFiles(e.target.files)}
                 hidden
               />
-
               <UploadCloud size={30} />
-
               <span>Import Files / ZIP</span>
-
             </label>
-
             <label className="upload-box">
-
               <input
                 type="file"
                 webkitdirectory="true"
@@ -305,47 +317,47 @@ export default function Recruiter() {
                 onChange={(e) => processFiles(e.target.files)}
                 hidden
               />
-
               <FolderSearch size={30} />
-
               <span>Full Folder</span>
-
             </label>
-
           </div>
 
-          {files.length > 0 && (
-
+          {files.length > 0 && !loading && (
             <div className="file-info-badge">
-
               <CheckCircle size={14} />
-
               {files.length} Files Ready
-
               <button onClick={() => setFiles([])}>
                 <X size={14} />
               </button>
-
             </div>
-
           )}
-
         </div>
+
+        {/* Progress Bar UI */}
+        {loading && (
+          <div className="analysis-progress-wrapper">
+            <div className="progress-container">
+              <div 
+                className="progress-fill" 
+                style={{ width: `${progress}%` }}
+              ></div>
+            </div>
+            <span className="loading-text-sub">
+              Scrutinizing {files.length} documents... {Math.round(progress)}%
+            </span>
+          </div>
+        )}
 
         <button
           className="analyze-btn"
           onClick={handleAnalyze}
           disabled={loading || !role || files.length === 0}
+          style={{ marginTop: loading ? '10px' : '20px' }}
         >
-
-          {loading ? "PROCESSING..." : "START ANALYSIS"}
-
+          {loading ? "SCANNING ASSETS..." : "START ANALYSIS"}
           {!loading && <Rocket size={20} />}
-
         </button>
-
       </div>
-
     </div>
   );
 }
