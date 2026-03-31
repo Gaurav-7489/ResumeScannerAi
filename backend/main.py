@@ -154,7 +154,7 @@ async def upload_files(
             if file.filename.lower().endswith(".pdf"):
                 text = read_pdf(path)
 
-           elif file.filename.lower().endswith(".docx"):
+            elif file.filename.lower().endswith(".docx"):
                 text = read_docx(path)
 
             else:
