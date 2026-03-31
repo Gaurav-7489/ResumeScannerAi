@@ -1,22 +1,32 @@
 from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
-
 from typing import List
 import shutil
 import pdfplumber
 import docx
 import os
+import uuid
 
 app = FastAPI()
 
+# ---------------- ENV CONFIG ----------------
+
+ENV = os.getenv("ENV", "development")
+
 # ---------------- CORS ----------------
 
+if ENV == "development":
+    origins = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ]
+else:
+    origins = [
+        "https://resumescannerai.vercel.app",
+    ]
 
-origins = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-    "https://resumescannerai.vercel.app",
-]
+# TEMP: allow all if needed (debug mode)
+# origins = ["*"]
 
 app.add_middleware(
     CORSMiddleware,
@@ -34,20 +44,26 @@ DATASET_DIR = "uploads/sample_dataset"
 os.makedirs(BASE_UPLOAD, exist_ok=True)
 os.makedirs(DATASET_DIR, exist_ok=True)
 
-
 # ---------------- READ FILES ----------------
 
 def read_pdf(path):
     text = ""
-    with pdfplumber.open(path) as pdf:
-        for page in pdf.pages:
-            text += page.extract_text() or ""
+    try:
+        with pdfplumber.open(path) as pdf:
+            for page in pdf.pages:
+                text += page.extract_text() or ""
+    except Exception as e:
+        print("PDF ERROR:", e)
     return text
 
 
 def read_docx(path):
-    doc = docx.Document(path)
-    text = "\n".join([p.text for p in doc.paragraphs])
+    text = ""
+    try:
+        doc = docx.Document(path)
+        text = "\n".join([p.text for p in doc.paragraphs])
+    except Exception as e:
+        print("DOCX ERROR:", e)
     return text
 
 
@@ -68,26 +84,15 @@ def parse_resume(text):
         if "@" in line and "." in line:
             data["email"] = line.strip()
 
-        if "+91" in line or len(line.strip()) == 10:
+        if "+91" in line or (line.strip().isdigit() and len(line.strip()) == 10):
             data["phone"] = line.strip()
 
     text_lower = text.lower()
 
     skills_list = [
-        "c++",
-        "java",
-        "python",
-        "react",
-        "node",
-        "mongodb",
-        "sql",
-        "excel",
-        "power bi",
-        "javascript",
-        "html",
-        "css",
-        "django",
-        "fastapi",
+        "c++", "java", "python", "react", "node", "mongodb",
+        "sql", "excel", "power bi", "javascript", "html",
+        "css", "django", "fastapi",
     ]
 
     for s in skills_list:
@@ -105,37 +110,13 @@ def score_resume(skills, role):
 
     role_rules = {
 
-        "Web Developer": [
-            "html",
-            "css",
-            "javascript",
-            "react",
-            "node",
-        ],
+        "Web Developer": ["html", "css", "javascript", "react", "node"],
 
-        "Machine Learning": [
-            "python",
-            "numpy",
-            "pandas",
-            "tensorflow",
-            "sql",
-        ],
+        "Machine Learning": ["python", "numpy", "pandas", "tensorflow", "sql"],
 
-        "Backend": [
-            "python",
-            "django",
-            "fastapi",
-            "sql",
-            "node",
-        ],
+        "Backend Engineer": ["python", "django", "fastapi", "sql", "node"],
 
-        "Data Science": [
-            "python",
-            "sql",
-            "excel",
-            "power bi",
-            "pandas",
-        ],
+        "Data Science": ["python", "sql", "excel", "power bi", "pandas"],
     }
 
     if role not in role_rules:
@@ -154,7 +135,7 @@ def score_resume(skills, role):
 
 @app.get("/")
 def home():
-    return {"msg": "AI Resume Ranker running"}
+    return {"msg": f"AI Resume Ranker running in {ENV} mode"}
 
 
 # ---------------- MAIN UPLOAD ----------------
@@ -169,37 +150,40 @@ async def upload_files(
 
     for file in files:
 
-        # save inside sample_dataset folder
-        path = os.path.join(DATASET_DIR, file.filename)
+        try:
+            # unique filename (important for production)
+            unique_name = f"{uuid.uuid4()}_{file.filename}"
+            path = os.path.join(DATASET_DIR, unique_name)
 
-        with open(path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+            with open(path, "wb") as buffer:
+                shutil.copyfileobj(file.file, buffer)
 
-        # read text
+            # read text
+            if file.filename.endswith(".pdf"):
+                text = read_pdf(path)
 
-        if file.filename.endswith(".pdf"):
-            text = read_pdf(path)
+            elif file.filename.endswith(".docx"):
+                text = read_docx(path)
 
-        elif file.filename.endswith(".docx"):
-            text = read_docx(path)
+            else:
+                continue
 
-        else:
+            parsed = parse_resume(text)
+            score = score_resume(parsed["skills"], role)
+
+            results.append({
+                "filename": file.filename,
+                "skills": parsed["skills"],
+                "email": parsed["email"],
+                "phone": parsed["phone"],
+                "score": score,
+            })
+
+        except Exception as e:
+            print("FILE ERROR:", file.filename, e)
             continue
 
-        parsed = parse_resume(text)
-
-        score = score_resume(parsed["skills"], role)
-
-        results.append({
-            "filename": file.filename,
-            "skills": parsed["skills"],
-            "email": parsed["email"],
-            "phone": parsed["phone"],
-            "score": score,
-        })
-
     # sort by score
-
     results.sort(key=lambda x: x["score"], reverse=True)
 
     return {

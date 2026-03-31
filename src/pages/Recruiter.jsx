@@ -6,9 +6,29 @@ import {
 } from "lucide-react";
 import "../styles/Recruiter.css";
 
-const API = import.meta.env.VITE_API_URL;
+/* ================= API CONFIG (FIXED FOR LOCAL + PROD) ================= */
 
-// Audio Engine (Memoized to prevent re-creation)
+// fallback logic (this is the magic)
+const getApiBase = () => {
+  const envUrl = import.meta.env.VITE_API_URL;
+
+  if (envUrl && envUrl.trim() !== "") {
+    return envUrl.replace(/\/$/, ""); // remove trailing slash
+  }
+
+  // fallback if env not set
+  if (window.location.hostname === "localhost") {
+    return "http://localhost:8000";
+  }
+
+  // production fallback (change if needed)
+  return "https://your-backend.onrender.com";
+};
+
+const API = getApiBase();
+
+/* ================= AUDIO ================= */
+
 const playSound = (type) => {
   const audio = new Audio(`/sounds/${type}.mp3`);
   audio.volume = 0.4;
@@ -127,6 +147,7 @@ export default function Recruiter() {
 
     } catch (err) {
 
+      console.error("API ERROR:", err);
       triggerToast("Connection failed. Check FastAPI backend.", "error");
 
     } finally {
@@ -165,8 +186,6 @@ export default function Recruiter() {
         <h2>
           Rank <span className="gradient-text">Engine</span>
         </h2>
-
-        {/* DOMAIN SEARCH */}
 
         <div className="input-group" ref={dropdownRef}>
 
@@ -248,8 +267,6 @@ export default function Recruiter() {
           </div>
 
         </div>
-
-        {/* UPLOAD */}
 
         <div className="input-group">
 
