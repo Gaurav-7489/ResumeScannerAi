@@ -40,28 +40,23 @@ export default function Analyzing() {
     "Evaluating skills vs reality...", "Loading chaos module...", "Almost done… probably not."
   ];
 
+  // 🔥 MAIN ENGINE
   useEffect(() => {
     const ambientSound = playSound("processing", true);
 
-    // SLOW TEXT: Changes every 2 seconds
     const textInterval = setInterval(() => {
       const randomIndex = Math.floor(Math.random() * funnySentences.length);
       setStatus(funnySentences[randomIndex]);
     }, 2000);
 
-    // SLOW PROGRESS: Takes roughly 10-15 seconds total to feel "heavy"
     const progressInterval = setInterval(() => {
       setProgress((prev) => {
-        const next = prev + (Math.random() * 3 + 1); // Small, steady increments
-        
-        if (next >= 100) {
-          clearInterval(progressInterval);
-          clearInterval(textInterval);
-          ambientSound.pause();
-          playSound("success");
-          setTimeout(() => navigate("/result", { state }), 800);
-          return 100;
-        }
+        if (prev >= 100) return 100; // 🛑 stop extra updates
+
+        let next = prev + (Math.random() * 3 + 1);
+
+        if (next >= 99) next = 100; // 🔥 force finish
+
         return next;
       });
     }, 400);
@@ -71,12 +66,50 @@ export default function Analyzing() {
       clearInterval(textInterval);
       ambientSound.pause();
     };
-  }, [state, navigate]);
+  }, []);
+
+  // 🔥 NAVIGATION + FALLBACK SYSTEM
+  useEffect(() => {
+    if (progress === 100) {
+      console.log("✅ Progress complete");
+
+      let finalData = state;
+
+      console.log("📦 Incoming state:", state);
+
+      if (!finalData || !finalData.ranking || finalData.ranking.length === 0) {
+        console.warn("⚠️ State invalid, checking localStorage...");
+
+        const stored = localStorage.getItem("resultData");
+
+        if (stored) {
+          finalData = JSON.parse(stored);
+
+          console.log("💾 Loaded from localStorage:", finalData);
+
+          if (!finalData || !finalData.ranking || finalData.ranking.length === 0) {
+            console.error("❌ Storage also invalid");
+            navigate("/recruiter");
+            return;
+          }
+        } else {
+          console.error("❌ No data anywhere");
+          navigate("/recruiter");
+          return;
+        }
+      }
+
+      setTimeout(() => {
+        console.log("🚀 Navigating to result...");
+        navigate("/result", { state: finalData });
+      }, 800);
+    }
+  }, [progress, navigate, state]);
 
   return (
     <div className="analyzing-page">
       <div className="hero-glow" />
-      
+
       <div className="analysis-container">
         <div className="scanner-circle">
           <div className="scan-line" />
@@ -84,7 +117,7 @@ export default function Analyzing() {
         </div>
 
         <h1 className="glitch-text">AI Resume Analyzer</h1>
-        
+
         <div className="progress-section">
           <div className="bar-bg">
             <div className="bar-fill" style={{ width: `${progress}%` }} />
