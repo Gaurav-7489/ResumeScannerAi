@@ -10,7 +10,6 @@ import uuid
 app = FastAPI()
 
 # ---------------- CORS (FINAL FIX - WORKS EVERYWHERE) ----------------
-
 origins = [
     # LOCALHOST
     "http://localhost:5173",
@@ -18,18 +17,18 @@ origins = [
     "http://localhost:5174",
     "http://127.0.0.1:5174",
 
-    # PRODUCTION FRONTEND
+    # MAIN PRODUCTION
     "https://resume-scanner-ai-one.vercel.app",
 ]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
+    allow_origin_regex=r"https://.*\.vercel\.app",  # 🔥 allows ALL preview URLs
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 # ----------- FOLDERS -----------
 
 BASE_UPLOAD = "uploads"
