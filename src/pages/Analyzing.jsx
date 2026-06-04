@@ -15,6 +15,7 @@ export default function Analyzing() {
   const navigate = useNavigate();
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState("Initializing neural link...");
+  const [phase, setPhase] = useState(0);
 
   const funnySentences = [
     "Overclocking the CPU until it cries...", "Rejecting resumes written in Comic Sans...",
@@ -40,23 +41,22 @@ export default function Analyzing() {
     "Evaluating skills vs reality...", "Loading chaos module...", "Almost done… probably not."
   ];
 
-  // 🔥 MAIN ENGINE
-  useEffect(() => {
-    const ambientSound = playSound("processing", true);
+  const phases = ["PARSING DOCUMENTS", "EXTRACTING SKILLS", "SCORING CANDIDATES", "GENERATING INSIGHTS"];
 
+  useEffect(() => {
     const textInterval = setInterval(() => {
-      const randomIndex = Math.floor(Math.random() * funnySentences.length);
-      setStatus(funnySentences[randomIndex]);
+      setStatus(funnySentences[Math.floor(Math.random() * funnySentences.length)]);
     }, 2000);
+
+    const phaseInterval = setInterval(() => {
+      setPhase(p => Math.min(p + 1, phases.length - 1));
+    }, 3000);
 
     const progressInterval = setInterval(() => {
       setProgress((prev) => {
-        if (prev >= 100) return 100; // 🛑 stop extra updates
-
+        if (prev >= 100) return 100;
         let next = prev + (Math.random() * 3 + 1);
-
-        if (next >= 99) next = 100; // 🔥 force finish
-
+        if (next >= 99) next = 100;
         return next;
       });
     }, 400);
@@ -64,59 +64,53 @@ export default function Analyzing() {
     return () => {
       clearInterval(progressInterval);
       clearInterval(textInterval);
-      ambientSound.pause();
+      clearInterval(phaseInterval);
     };
   }, []);
 
-  // 🔥 NAVIGATION + FALLBACK SYSTEM
   useEffect(() => {
     if (progress === 100) {
-      console.log("✅ Progress complete");
-
       let finalData = state;
-
-      console.log("📦 Incoming state:", state);
-
       if (!finalData || !finalData.ranking || finalData.ranking.length === 0) {
-        console.warn("⚠️ State invalid, checking localStorage...");
-
         const stored = localStorage.getItem("resultData");
-
         if (stored) {
           finalData = JSON.parse(stored);
-
-          console.log("💾 Loaded from localStorage:", finalData);
-
           if (!finalData || !finalData.ranking || finalData.ranking.length === 0) {
-            console.error("❌ Storage also invalid");
             navigate("/recruiter");
             return;
           }
         } else {
-          console.error("❌ No data anywhere");
           navigate("/recruiter");
           return;
         }
       }
-
-      setTimeout(() => {
-        console.log("🚀 Navigating to result...");
-        navigate("/result", { state: finalData });
-      }, 800);
+      setTimeout(() => navigate("/result", { state: finalData }), 800);
     }
   }, [progress, navigate, state]);
 
   return (
     <div className="analyzing-page">
-      <div className="hero-glow" />
+      <div className="page-bg" />
+      <div className="noise-overlay" />
 
       <div className="analysis-container">
         <div className="scanner-circle">
           <div className="scan-line" />
           <div className="core-glow" />
+          <div className="ring ring-1" />
+          <div className="ring ring-2" />
         </div>
 
         <h1 className="glitch-text">AI Resume Analyzer</h1>
+
+        <div className="phase-indicator">
+          {phases.map((p, i) => (
+            <div key={i} className={`phase-dot ${i <= phase ? 'active' : ''}`}>
+              <div className="dot" />
+              <span>{p}</span>
+            </div>
+          ))}
+        </div>
 
         <div className="progress-section">
           <div className="bar-bg">
@@ -131,9 +125,9 @@ export default function Analyzing() {
         <p className="funny-status">{status}</p>
 
         <div className="bottom-terminal">
-          <p>{">"} CONNECTING_TO_SATELLITE...</p>
-          <p>{">"} ENCRYPTING_PIZZA_ORDER...</p>
-          <p>{">"} STATUS: CALCULATING...</p>
+          <p><span className="term-prompt">&gt;</span> NEURAL_NETWORK_LOADED</p>
+          <p><span className="term-prompt">&gt;</span> SKILL_MATRIX_INITIALIZED</p>
+          <p><span className="term-prompt">&gt;</span> STATUS: {phases[phase]}...</p>
         </div>
       </div>
     </div>
