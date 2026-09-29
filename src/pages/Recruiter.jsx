@@ -9,8 +9,7 @@ import "../styles/Recruiter.css";
 const getApiBase = () => {
   const envUrl = import.meta.env.VITE_API_URL;
   if (envUrl && envUrl.trim() !== "") return envUrl.replace(/\/$/, "");
-  if (window.location.hostname === "localhost") return "http://localhost:8000";
-  return "https://resumescannerai-backend.onrender.com";
+  return "http://127.0.0.1:8000";
 };
 
 const API = getApiBase();
