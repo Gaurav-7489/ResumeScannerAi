@@ -1,0 +1,73 @@
+name: Local Demo Smoke Test
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install and build frontend
+        run: |
+          npm ci
+          npm run build
+      - name: Install backend
+        run: pip install -r backend/requirements.txt
+      - name: Start backend
+        run: |
+          cd backend
+          python -m uvicorn main:app --host 127.0.0.1 --port 8000 > /tmp/resume-api.log 2>&1 &
+          for i in {1..20}; do
+            if curl -fsS http://127.0.0.1:8000/ > /dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/resume-api.log
+          exit 1
+      - name: Create sample resume
+        run: |
+          python - <<'PY'
+          from docx import Document
+          d = Document()
+          d.add_heading("Alex Candidate", 0)
+          d.add_paragraph("alex@example.com | 9876543210")
+          d.add_paragraph("github.com/alexcandidate | linkedin.com/in/alexcandidate")
+          d.add_heading("Skills", level=1)
+          d.add_paragraph("JavaScript React HTML CSS SQL Node Express Git Docker TypeScript REST API")
+          d.add_heading("Experience", level=1)
+          d.add_paragraph("Full Stack Engineer with 3 years of experience building web applications.")
+          d.add_heading("Education", level=1)
+          d.add_paragraph("B.Tech Computer Science")
+          d.add_heading("Projects", level=1)
+          d.add_paragraph("Project one. Project two. Project three.")
+          d.save("/tmp/sample-resume.docx")
+          PY
+      - name: Test real resume upload
+        run: |
+          curl -fsS -X POST http://127.0.0.1:8000/upload \
+            -F 'role=Full Stack Engineer' \
+            -F 'job_description=Looking for React JavaScript Node SQL Docker and REST API experience' \
+            -F 'files=@/tmp/sample-resume.docx' \
+            -o /tmp/result.json
+          python - <<'PY'
+          import json
+          data = json.load(open("/tmp/result.json"))
+          assert data["ranking"], data
+          r = data["ranking"][0]
+          assert r["candidate_name"], r
+          assert isinstance(r["score"], int), r
+          assert isinstance(r["ats_score"], int), r
+          assert r["skills"], r
+          print("UPLOAD_SMOKE_TEST_OK")
+          print("Candidate:", r["candidate_name"])
+          print("Score:", r["score"], "ATS:", r["ats_score"])
+          PY
