@@ -90,8 +90,22 @@ export default function Recruiter() {
   };
 
   const processFiles = (uploadedFiles) => {
-    const validFiles = Array.from(uploadedFiles).filter(f => !f.name.startsWith('.'));
-    if (validFiles.length > 0) setFiles(validFiles);
+    const incoming = Array.from(uploadedFiles);
+    const supported = incoming.filter((file) => {
+      const name = file.name.toLowerCase();
+      return !file.name.startsWith(".") && (name.endsWith(".pdf") || name.endsWith(".docx"));
+    });
+
+    if (supported.length === 0) {
+      triggerToast("Select PDF or DOCX resumes.", "error");
+      return;
+    }
+
+    if (supported.length > 100) {
+      triggerToast("Maximum batch size is 100 resumes.", "error");
+    }
+
+    setFiles(supported.slice(0, 100));
   };
 
   const handleDrag = (e) => {
@@ -129,8 +143,11 @@ export default function Recruiter() {
 
     try {
       const res = await fetch(`${API}/upload`, { method: "POST", body: formData });
-      if (!res.ok) throw new Error();
       const data = await res.json();
+      if (!res.ok) throw new Error(data?.detail || "Resume analysis failed");
+      if (!data.ranking?.length) {
+        throw new Error("No readable PDF/DOCX resumes were found");
+      }
       setProgress(100);
       localStorage.setItem("resultData", JSON.stringify(data));
       
@@ -153,7 +170,7 @@ export default function Recruiter() {
       setTimeout(() => navigate("/analyzing", { state: data }), 800);
     } catch (e) {
       console.error(e);
-      triggerToast("Connection failed. Check backend.", "error");
+      triggerToast(e.message || "Connection failed. Check backend.", "error");
       setLoading(false);
     }
   };
@@ -247,12 +264,12 @@ export default function Recruiter() {
             onDrop={handleDrop}
           >
             <label className="upload-box">
-              <input type="file" multiple onChange={(e) => processFiles(e.target.files)} hidden />
+              <input type="file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" multiple onChange={(e) => processFiles(e.target.files)} hidden />
               <UploadCloud size={28} />
-              <span>Import Files / ZIP</span>
+              <span>Import PDF / DOCX</span>
             </label>
             <label className="upload-box">
-              <input type="file" webkitdirectory="true" multiple onChange={(e) => processFiles(e.target.files)} hidden />
+              <input type="file" webkitdirectory="true" directory="" multiple onChange={(e) => processFiles(e.target.files)} hidden />
               <FolderSearch size={28} />
               <span>Full Folder</span>
             </label>
@@ -261,7 +278,7 @@ export default function Recruiter() {
           {files.length > 0 && !loading && (
             <div className="file-info-badge">
               <CheckCircle size={14} />
-              {files.length} Files Ready
+              {files.length}/100 Resumes Ready
               <button onClick={() => setFiles([])}><X size={14} /></button>
             </div>
           )}
