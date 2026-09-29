@@ -14,11 +14,7 @@ const getApiBase = () => {
 
 const API = getApiBase();
 
-const playSound = (type) => {
-  const audio = new Audio(`/sounds/${type}.mp3`);
-  audio.volume = 0.4;
-  audio.play().catch(() => {});
-};
+const playSound = () => {};
 
 const DOMAINS = [
   "Web Developer", "Backend Engineer", "Machine Learning", "Data Science",
@@ -47,24 +43,6 @@ export default function Recruiter() {
   const filteredDomains = useMemo(() => {
     return DOMAINS.filter(d => d.toLowerCase().includes(searchTerm.toLowerCase()));
   }, [searchTerm]);
-
-  useEffect(() => {
-    let interval;
-    if (loading) {
-      setProgress(0);
-      interval = setInterval(() => {
-        setProgress((prev) => {
-          if (prev >= 95) return prev;
-          const increment = prev < 30 ? 5 : prev < 70 ? 2 : 0.5;
-          return prev + increment;
-        });
-      }, 200);
-    } else {
-      setProgress(0);
-      clearInterval(interval);
-    }
-    return () => clearInterval(interval);
-  }, [loading]);
 
   useEffect(() => {
     const handleClick = (e) => {
@@ -134,6 +112,7 @@ export default function Recruiter() {
     if (files.length === 0) return triggerToast("No resumes detected.", "error");
 
     setLoading(true);
+    setProgress(12);
     const formData = new FormData();
     formData.append("role", role);
     files.forEach(file => formData.append("files", file));
@@ -142,7 +121,9 @@ export default function Recruiter() {
     }
 
     try {
+      setProgress(35);
       const res = await fetch(`${API}/upload`, { method: "POST", body: formData });
+      setProgress(90);
       const data = await res.json();
       if (!res.ok) throw new Error(data?.detail || "Resume analysis failed");
       if (!data.ranking?.length) {
@@ -162,12 +143,10 @@ export default function Recruiter() {
         topScore: data.ranking?.[0]?.score || 0,
         grade: data.ranking?.[0]?.grade || "A",
         filename: `${files.length} Resumes`,
-        fullData: data // Store data to restore later
       };
       localStorage.setItem("scanHistory", JSON.stringify([newScan, ...history].slice(0, 10)));
 
-      triggerToast(`${data.ranking?.length || 0} resumes analyzed!`, "success");
-      setTimeout(() => navigate("/analyzing", { state: data }), 800);
+      navigate("/result", { state: data });
     } catch (e) {
       console.error(e);
       triggerToast(e.message || "Connection failed. Check backend.", "error");
