@@ -1197,3 +1197,38 @@
   .header-actions button { flex: 1; justify-content: center; }
   .tabs-container { overflow-x: auto; }
 }
+
+
+/* ============ PERFORMANCE MODE ============ */
+.candidate-list-pane,
+.candidate-detail-pane,
+.cohort-card,
+.stat-card {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.candidate-list-card {
+  contain: layout paint style;
+}
+
+.candidate-list-card,
+.stat-card,
+.tab-btn,
+.btn-primary,
+.btn-secondary {
+  transition-duration: 120ms;
+}
+
+.list-scroll-area {
+  overscroll-behavior: contain;
+  content-visibility: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
