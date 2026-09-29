@@ -2,6 +2,4 @@ fastapi
 uvicorn
 python-multipart
 pdfplumber
-PyPDF2
 python-docx
-spacy
