@@ -8,6 +8,8 @@ import os
 import uuid
 import re
 import json
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 
 app = FastAPI(title="RANKER.AI Backend", version="3.0.0")
 
@@ -791,172 +793,141 @@ def get_roles():
 
 
 # ================ UPLOAD & ANALYZE ================
+# ================ FAST BATCH PROCESSOR ================
+BATCH_WORKERS = min(8, max(2, (os.cpu_count() or 4)))
+
+def process_resume_path(path, filename, role, job_description):
+    if filename.lower().endswith(".pdf"):
+        text = read_pdf(path)
+    elif filename.lower().endswith(".docx"):
+        text = read_docx(path)
+    else:
+        raise ValueError("Unsupported format")
+
+    if not text or len(text.strip()) < 30:
+        raise ValueError("Could not extract enough readable text")
+
+    parsed = parse_resume(text, filename)
+    if not parsed["skills"]:
+        parsed["skills"] = ["unknown"]
+
+    score, strengths, weaknesses = score_resume(parsed, role)
+    jd_analysis = analyze_job_description_match(parsed["skills"], clean_text(text), job_description)
+    ats_score, ats_breakdown = calculate_ats_score(parsed, text)
+    custom_strengths, custom_weaknesses = generate_feedback(parsed, score, role, ats_score)
+    strengths = list(dict.fromkeys(strengths + custom_strengths))
+    weaknesses = list(dict.fromkeys(weaknesses + custom_weaknesses))
+
+    final_grade_score = jd_analysis["match_score"] if jd_analysis is not None else score
+    grade = "A+" if final_grade_score >= 80 else "A" if final_grade_score >= 70 else "B+" if final_grade_score >= 60 else "B" if final_grade_score >= 50 else "C" if final_grade_score >= 40 else "D" if final_grade_score >= 25 else "F"
+
+    return {
+        "filename": filename,
+        "candidate_name": parsed["candidate_name"],
+        "skills": parsed["skills"],
+        "skill_categories": parsed["skill_categories"],
+        "email": parsed["email"],
+        "phone": parsed["phone"],
+        "linkedin": parsed["linkedin"],
+        "github": parsed["github"],
+        "education": parsed["education"],
+        "certifications": parsed["certifications"],
+        "experience_level": parsed["experience_level"],
+        "experience_years": parsed["experience_years"],
+        "projects_count": parsed["projects_count"],
+        "word_count": parsed["word_count"],
+        "spoken_languages": parsed["spoken_languages"],
+        "programming_languages": parsed["programming_languages"],
+        "score": score,
+        "grade": grade,
+        "ats_score": ats_score,
+        "ats_breakdown": ats_breakdown,
+        "jd_analysis": jd_analysis,
+        "strengths": strengths,
+        "weaknesses": weaknesses,
+        "summary": generate_summary(parsed, score, role),
+    }
+
 @app.post("/upload")
 async def upload_files(
     role: str = Form(...),
     files: List[UploadFile] = File(...),
     job_description: Optional[str] = Form(None)
 ):
-    print("\n========= NEW REQUEST =========")
-    print("[ROLE]:", role)
-    print("[FILES COUNT]:", len(files))
-    print("[HAS JOB DESC]:", job_description is not None and len(job_description.strip()) > 0)
-
     if len(files) > 100:
         raise HTTPException(status_code=400, detail="Maximum batch size is 100 resumes.")
-
     if role not in ROLE_RULES:
         raise HTTPException(status_code=400, detail="Please select a supported target role.")
 
-    results = []
+    saved = []
     failures = []
-    total_skills_found = set()
-
     for file in files:
-        path = None
+        filename = file.filename or "resume"
+        if not filename.lower().endswith((".pdf", ".docx")):
+            failures.append({"filename": filename, "reason": "Unsupported format; use PDF or DOCX"})
+            await file.close()
+            continue
+        path = os.path.join(DATASET_DIR, f"{uuid.uuid4()}_{filename}")
         try:
-            filename = file.filename or "resume"
-            if not filename.lower().endswith((".pdf", ".docx")):
-                failures.append({"filename": filename, "reason": "Unsupported format; use PDF or DOCX"})
-                continue
-
-            unique_name = f"{uuid.uuid4()}_{filename}"
-            path = os.path.join(DATASET_DIR, unique_name)
-
             with open(path, "wb") as buffer:
                 shutil.copyfileobj(file.file, buffer)
-
-            text = ""
-
-            if file.filename.lower().endswith(".pdf"):
-                text = read_pdf(path)
-            elif file.filename.lower().endswith(".docx"):
-                text = read_docx(path)
-            else:
-                failures.append({"filename": file.filename, "reason": "Unsupported format"})
-                continue
-
-            if not text or len(text.strip()) < 30:
-                failures.append({"filename": file.filename, "reason": "Could not extract enough readable text"})
-                continue
-
-            parsed = parse_resume(text, file.filename)
-
-            if not parsed["skills"]:
-                parsed["skills"] = ["unknown"]
-
-            # Calculate basic role matching
-            score, strengths, weaknesses = score_resume(parsed, role)
-            summary = generate_summary(parsed, score, role)
-
-            # Job Description Analysis
-            jd_analysis = analyze_job_description_match(parsed["skills"], clean_text(text), job_description)
-
-            # Calculate ATS compatibility score
-            ats_score, ats_breakdown = calculate_ats_score(parsed, text)
-            
-            # Generate custom feedback based on ATS and JD details
-            custom_strengths, custom_weaknesses = generate_feedback(parsed, score, role, ats_score)
-            
-            # Combine or overwrite feedback
-            strengths = list(set(strengths + custom_strengths))
-            weaknesses = list(set(weaknesses + custom_weaknesses))
-
-            # Match score represents either job description match or role match, or a blend of both!
-            # Let's keep role match as score, and return jd_analysis separately
-            # Grade
-            final_grade_score = jd_analysis["match_score"] if (jd_analysis is not None) else score
-            if final_grade_score >= 80:
-                grade = "A+"
-            elif final_grade_score >= 70:
-                grade = "A"
-            elif final_grade_score >= 60:
-                grade = "B+"
-            elif final_grade_score >= 50:
-                grade = "B"
-            elif final_grade_score >= 40:
-                grade = "C"
-            elif final_grade_score >= 25:
-                grade = "D"
-            else:
-                grade = "F"
-
-            total_skills_found.update(parsed["skills"])
-
-            results.append({
-                "filename": file.filename,
-                "candidate_name": parsed["candidate_name"],
-                "skills": parsed["skills"],
-                "skill_categories": parsed["skill_categories"],
-                "email": parsed["email"],
-                "phone": parsed["phone"],
-                "linkedin": parsed["linkedin"],
-                "github": parsed["github"],
-                "education": parsed["education"],
-                "certifications": parsed["certifications"],
-                "experience_level": parsed["experience_level"],
-                "experience_years": parsed["experience_years"],
-                "projects_count": parsed["projects_count"],
-                "word_count": parsed["word_count"],
-                "spoken_languages": parsed["spoken_languages"],
-                "programming_languages": parsed["programming_languages"],
-                "score": score,
-                "grade": grade,
-                "ats_score": ats_score,
-                "ats_breakdown": ats_breakdown,
-                "jd_analysis": jd_analysis,
-                "strengths": strengths,
-                "weaknesses": weaknesses,
-                "summary": summary,
-            })
-
-        except Exception as e:
-            print("[CRASH FILE]:", file.filename, e)
-            failures.append({"filename": file.filename or "resume", "reason": "Could not process this resume"})
+            saved.append((path, filename))
+        except Exception:
+            failures.append({"filename": filename, "reason": "Could not read upload"})
         finally:
+            await file.close()
+
+    loop = asyncio.get_running_loop()
+    results = []
+    try:
+        with ThreadPoolExecutor(max_workers=BATCH_WORKERS) as pool:
+            tasks = [
+                loop.run_in_executor(pool, process_resume_path, path, filename, role, job_description)
+                for path, filename in saved
+            ]
+            completed = await asyncio.gather(*tasks, return_exceptions=True)
+
+        for (_, filename), result in zip(saved, completed):
+            if isinstance(result, Exception):
+                failures.append({"filename": filename, "reason": str(result)[:120]})
+            else:
+                results.append(result)
+    finally:
+        for path, _ in saved:
             try:
-                await file.close()
-            except Exception:
+                os.remove(path)
+            except OSError:
                 pass
-            if path and os.path.exists(path):
-                try:
-                    os.remove(path)
-                except OSError:
-                    pass
 
-    results.sort(key=lambda x: x["score"], reverse=True)
-
-    # Analytics
-    avg_score = round(sum(r["score"] for r in results) / max(len(results), 1), 1)
+    results.sort(key=lambda item: item["score"], reverse=True)
+    total_skills_found = {skill for item in results for skill in item["skills"]}
+    avg_score = round(sum(item["score"] for item in results) / max(len(results), 1), 1)
     top_skills_freq = {}
-    for r in results:
-        for s in r["skills"]:
-            top_skills_freq[s] = top_skills_freq.get(s, 0) + 1
-    top_skills_sorted = sorted(top_skills_freq.items(), key=lambda x: x[1], reverse=True)[:10]
+    for item in results:
+        for skill in item["skills"]:
+            top_skills_freq[skill] = top_skills_freq.get(skill, 0) + 1
+    top_skills_sorted = sorted(top_skills_freq.items(), key=lambda item: item[1], reverse=True)[:10]
 
     return {
         "role": role,
-        "has_job_description": job_description is not None and len(job_description.strip()) > 0,
+        "has_job_description": bool(job_description and job_description.strip()),
         "ranking": results,
         "processing": {
             "requested": len(files),
             "processed": len(results),
             "failed": len(failures),
             "failures": failures[:20],
+            "workers": BATCH_WORKERS,
         },
         "analytics": {
             "total_resumes": len(results),
             "average_score": avg_score,
             "unique_skills_found": len(total_skills_found),
-            "top_skills": [{"skill": s, "count": c} for s, c in top_skills_sorted],
+            "top_skills": [{"skill": skill, "count": count} for skill, count in top_skills_sorted],
             "grade_distribution": {
-                "A+": sum(1 for r in results if r["grade"] == "A+"),
-                "A": sum(1 for r in results if r["grade"] == "A"),
-                "B+": sum(1 for r in results if r["grade"] == "B+"),
-                "B": sum(1 for r in results if r["grade"] == "B"),
-                "C": sum(1 for r in results if r["grade"] == "C"),
-                "D": sum(1 for r in results if r["grade"] == "D"),
-                "F": sum(1 for r in results if r["grade"] == "F"),
-            }
-        }
+                grade: sum(1 for item in results if item["grade"] == grade)
+                for grade in ["A+", "A", "B+", "B", "C", "D", "F"]
+            },
+        },
     }
+
