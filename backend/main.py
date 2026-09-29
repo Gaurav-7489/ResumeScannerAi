@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, Form
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional
 import shutil
@@ -802,12 +802,25 @@ async def upload_files(
     print("[FILES COUNT]:", len(files))
     print("[HAS JOB DESC]:", job_description is not None and len(job_description.strip()) > 0)
 
+    if len(files) > 100:
+        raise HTTPException(status_code=400, detail="Maximum batch size is 100 resumes.")
+
+    if role not in ROLE_RULES:
+        raise HTTPException(status_code=400, detail="Please select a supported target role.")
+
     results = []
+    failures = []
     total_skills_found = set()
 
     for file in files:
+        path = None
         try:
-            unique_name = f"{uuid.uuid4()}_{file.filename}"
+            filename = file.filename or "resume"
+            if not filename.lower().endswith((".pdf", ".docx")):
+                failures.append({"filename": filename, "reason": "Unsupported format; use PDF or DOCX"})
+                continue
+
+            unique_name = f"{uuid.uuid4()}_{filename}"
             path = os.path.join(DATASET_DIR, unique_name)
 
             with open(path, "wb") as buffer:
@@ -820,9 +833,11 @@ async def upload_files(
             elif file.filename.lower().endswith(".docx"):
                 text = read_docx(path)
             else:
+                failures.append({"filename": file.filename, "reason": "Unsupported format"})
                 continue
 
             if not text or len(text.strip()) < 30:
+                failures.append({"filename": file.filename, "reason": "Could not extract enough readable text"})
                 continue
 
             parsed = parse_resume(text, file.filename)
@@ -897,6 +912,17 @@ async def upload_files(
 
         except Exception as e:
             print("[CRASH FILE]:", file.filename, e)
+            failures.append({"filename": file.filename or "resume", "reason": "Could not process this resume"})
+        finally:
+            try:
+                await file.close()
+            except Exception:
+                pass
+            if path and os.path.exists(path):
+                try:
+                    os.remove(path)
+                except OSError:
+                    pass
 
     results.sort(key=lambda x: x["score"], reverse=True)
 
@@ -912,6 +938,12 @@ async def upload_files(
         "role": role,
         "has_job_description": job_description is not None and len(job_description.strip()) > 0,
         "ranking": results,
+        "processing": {
+            "requested": len(files),
+            "processed": len(results),
+            "failed": len(failures),
+            "failures": failures[:20],
+        },
         "analytics": {
             "total_resumes": len(results),
             "average_score": avg_score,
